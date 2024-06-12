@@ -331,7 +331,7 @@ class UOpGraph:
 
   def linearize(self, extra_pm:Optional[PatternMatcher]=None, type_verify=True):
     # NOTE: relinearizering should be okay
-    #assert self._uops is None, "already linearized"
+    assert self._uops is None, "already linearized"
 
     # get sink
     _sinks: List[UOp] = []
