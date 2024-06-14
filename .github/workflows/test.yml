@@ -11,7 +11,7 @@ on:
   pull_request:
   workflow_dispatch:
     inputs:
-       run_process_replay:
+       assert_process_replay:
          description: "Run process replay tests"
          required: false
          default: false
@@ -22,7 +22,7 @@ jobs:
     name: Check process replay
     runs-on: ubuntu-latest
     outputs:
-      run_process_replay: ${{ steps.set-env.outputs.run_process_replay }}
+      assert_process_replay: ${{ steps.set-env.outputs.assert_process_replay }}
     timeout-minutes: 5
 
     steps:
@@ -34,10 +34,11 @@ jobs:
       id: set-env
       run: |
         COMMIT_MESSAGE=$(git show -s --format=%B ${{ github.event.pull_request.head.sha }})
-        if ! { echo "$COMMIT_MESSAGE" | grep -q "\[run_process_replay\]" || [ "${{ github.event.inputs.run_process_replay }}" == "true" ]; } || [ "$GITHUB_REF_NAME" == "master" ]; then
+        if { echo "$COMMIT_MESSAGE" | grep -q "\[run_process_replay\]" || [ "${{ github.event.inputs.run_process_replay }}" == "true" ]; } && [ "$GITHUB_REF_NAME" != "master" ]; then
+          echo "ASSERT_PROCESS_REPLAY=1" >> $GITHUB_OUTPUT
+        else
           echo "ASSERT_PROCESS_REPLAY=0" >> $GITHUB_OUTPUT
         fi
-
   uops:
     name: uops tests
     runs-on: ubuntu-latest
@@ -148,8 +149,6 @@ jobs:
       matrix:
         task: [optimage, openpilot, onnx]
     needs: check_process_replay
-    #env:
-      #RUN_PROCESS_REPLAY: ${{ needs.check_process_replay.outputs.run_process_replay }}
 
     name: ${{ matrix.task=='optimage'&&'GPU OPT and IMAGE Tests' || matrix.task=='openpilot'&&'openpilot (OpenCL) Tests' || matrix.task=='onnx'&&'ONNX+Optimization Tests' }}
     runs-on: ubuntu-20.04
@@ -237,7 +236,6 @@ jobs:
         name: Test THREEFRY
         run: PYTHONPATH=. THREEFRY=1 GPU=1 python3 -m pytest test/test_randomness.py test/test_jit.py
       - name: Run process replay tests
-        if: env.RUN_PROCESS_REPLAY == '1'
         run: cp test/external/replay_codegen.py ./replay_codegen.py && git fetch origin master && git checkout origin/master && PYTHONPATH=. python3 replay_codegen.py
 
   #testwebgpu:
@@ -285,8 +283,6 @@ jobs:
     name: Metal Tests
     runs-on: macos-14
     needs: check_process_replay
-    env:
-      RUN_PROCESS_REPLAY: ${{ needs.check_process_replay.outputs.run_process_replay }}
     timeout-minutes: 20
 
     steps:
@@ -331,7 +327,6 @@ jobs:
     - name: Fuzz Test models schedule
       run: FUZZ_SCHEDULE=1 FUZZ_SCHEDULE_MAX_PATHS=5 python -m pytest test/models/test_train.py test/models/test_end2end.py
     - name: Run process replay tests
-      if: env.RUN_PROCESS_REPLAY == '1'
       run: cp test/external/replay_codegen.py ./replay_codegen.py && git fetch origin master && git checkout origin/master && PYTHONPATH=. python3 replay_codegen.py
 
 #  testwebgl:
@@ -373,8 +368,6 @@ jobs:
       matrix:
         backend: [llvm, clang, gpu, ptx, amd, nv] #, triton]
     needs: check_process_replay
-    env:
-      RUN_PROCESS_REPLAY: ${{ needs.check_process_replay.outputs.run_process_replay }}
 
     name: Tests on (${{ matrix.backend }})
     runs-on: ubuntu-latest
@@ -514,7 +507,6 @@ jobs:
           clang -O2 recognize.c -lm -o recognize
           cat test/models/efficientnet/Chicken.jpg | ./recognize | grep cock
       - name: Run process replay tests
-        if: env.RUN_PROCESS_REPLAY == '1'
         run: cp test/external/replay_codegen.py ./replay_codegen.py && git fetch origin master && git checkout origin/master && PYTHONPATH=. python3 replay_codegen.py
 
   #testunicorn:
